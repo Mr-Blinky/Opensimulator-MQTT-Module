@@ -11,7 +11,7 @@ On the OpenSim host, run:
 Get-ChildItem 'D:\Opensim\Builds\rev-latest' -Recurse -Filter OpenSim.Region.Framework.dll | Select-Object -First 5 FullName
 ```
 
-The project defaults to `D:\Opensim\Builds\rev-latest\bin`. If your DLL is somewhere else, supply that directory as `OpenSimBinPath`.
+The project defaults to `D:\Opensim\Builds\rev-latest`. If your DLL is somewhere else, supply that directory as `OpenSimBinPath`.
 
 ## 2. Build
 
@@ -19,7 +19,7 @@ Clone this repository to `D:\Opensim\Source\Opensimulator-MQTT-Module`, then:
 
 ```powershell
 cd 'D:\Opensim\Source\Opensimulator-MQTT-Module'
-dotnet build .\src\OpenSim.MQTT\OpenSim.MQTT.csproj -c Release -p:OpenSimBinPath='D:\Opensim\Builds\rev-latest\bin'
+dotnet build .\src\OpenSim.MQTT\OpenSim.MQTT.csproj -c Release -p:OpenSimBinPath='D:\Opensim\Builds\rev-latest'
 ```
 
 If compilation fails, **stop and share the exact error**. The OSgrid build's interfaces and assembly references need to be verified against the installed revision.
