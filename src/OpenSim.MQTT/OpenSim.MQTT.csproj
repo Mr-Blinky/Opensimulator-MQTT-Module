@@ -19,6 +19,10 @@
       <HintPath>$(OpenSimBinPath)\Mono.Addins.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="log4net">
+      <HintPath>$(OpenSimBinPath)\log4net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Nini">
       <HintPath>$(OpenSimBinPath)\Nini.dll</HintPath>
       <Private>false</Private>
