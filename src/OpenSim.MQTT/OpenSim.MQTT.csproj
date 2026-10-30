@@ -15,6 +15,10 @@
       <HintPath>$(OpenSimBinPath)\OpenSim.Framework.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Mono.Addins">
+      <HintPath>$(OpenSimBinPath)\Mono.Addins.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Nini">
       <HintPath>$(OpenSimBinPath)\Nini.dll</HintPath>
       <Private>false</Private>
