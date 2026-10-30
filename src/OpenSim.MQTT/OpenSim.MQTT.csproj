@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <OpenSimBinPath Condition="'$(OpenSimBinPath)' == ''">D:\Opensim\Builds\rev-latest\bin</OpenSimBinPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="OpenSim.Region.Framework">
+      <HintPath>$(OpenSimBinPath)\OpenSim.Region.Framework.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="OpenSim.Framework">
+      <HintPath>$(OpenSimBinPath)\OpenSim.Framework.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Nini">
+      <HintPath>$(OpenSimBinPath)\Nini.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
