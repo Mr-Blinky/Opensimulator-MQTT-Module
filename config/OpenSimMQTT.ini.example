@@ -1,0 +1,9 @@
+; M0 diagnostic only: no broker connection is attempted.
+; Include this configuration in your simulator's OpenSim configuration.
+[OpenSimMQTT]
+Enabled = true
+
+; Reserved for M1. TLS is optional and disabled for LAN testing.
+BrokerHost = 127.0.0.1
+BrokerPort = 1883
+UseTLS = false
