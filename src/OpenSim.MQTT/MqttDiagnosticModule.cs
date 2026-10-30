@@ -1,5 +1,6 @@
 using System;
 using Nini.Config;
+using Mono.Addins;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 
@@ -8,6 +9,7 @@ namespace OpenSim.MQTT;
 /// <summary>
 /// M0 only: diagnostic region-module lifecycle test. No MQTT traffic.
 /// </summary>
+[Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule", Id = "OpenSimMQTTDiagnostic")]
 public sealed class MqttDiagnosticModule : INonSharedRegionModule
 {
     private bool _enabled;
