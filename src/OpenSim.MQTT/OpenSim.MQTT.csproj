@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
-    <OpenSimBinPath Condition="'$(OpenSimBinPath)' == ''">D:\Opensim\Builds\rev-latest\bin</OpenSimBinPath>
+    <OpenSimBinPath Condition="'$(OpenSimBinPath)' == ''">D:\Opensim\Builds\rev-latest</OpenSimBinPath>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="OpenSim.Region.Framework">
