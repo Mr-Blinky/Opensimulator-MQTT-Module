@@ -1,4 +1,6 @@
 using System;
+using System.Reflection;
+using log4net;
 using Nini.Config;
 using Mono.Addins;
 using OpenSim.Region.Framework.Interfaces;
@@ -12,6 +14,7 @@ namespace OpenSim.MQTT;
 [Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule", Id = "OpenSimMQTTDiagnostic")]
 public sealed class MqttDiagnosticModule : INonSharedRegionModule
 {
+    private static readonly ILog Log = LogManager.GetLogger(MethodBase.GetCurrentMethod()!.DeclaringType);
     private bool _enabled;
 
     public string Name => "OpenSim MQTT Diagnostic";
@@ -21,30 +24,30 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     {
         // Disabled unless explicitly enabled in the simulator configuration.
         _enabled = source.Configs["OpenSimMQTT"]?.GetBoolean("Enabled", false) ?? false;
-        Console.WriteLine($"[OpenSimMQTT] Initialise; enabled={_enabled}");
+        Log.Info($"[OpenSimMQTT] Initialise; enabled={_enabled}");
     }
 
     public void AddRegion(Scene scene)
     {
         if (!_enabled) return;
-        Console.WriteLine($"[OpenSimMQTT] AddRegion: {scene.RegionInfo.RegionName}");
+        Log.Info($"[OpenSimMQTT] AddRegion: {scene.RegionInfo.RegionName}");
     }
 
     public void RegionLoaded(Scene scene)
     {
         if (!_enabled) return;
-        Console.WriteLine($"[OpenSimMQTT] RegionLoaded: {scene.RegionInfo.RegionName}");
+        Log.Info($"[OpenSimMQTT] RegionLoaded: {scene.RegionInfo.RegionName}");
     }
 
     public void RemoveRegion(Scene scene)
     {
         if (!_enabled) return;
-        Console.WriteLine($"[OpenSimMQTT] RemoveRegion: {scene.RegionInfo.RegionName}");
+        Log.Info($"[OpenSimMQTT] RemoveRegion: {scene.RegionInfo.RegionName}");
     }
 
     public void Close()
     {
         if (!_enabled) return;
-        Console.WriteLine("[OpenSimMQTT] Close");
+        Log.Info("[OpenSimMQTT] Close");
     }
 }
