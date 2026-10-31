@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using log4net;
 using Nini.Config;
 using Mono.Addins;
+using OpenMetaverse;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Protocol;
@@ -14,7 +15,7 @@ using OpenSim.Region.Framework.Scenes;
 namespace OpenSim.MQTT;
 
 /// <summary>
-/// M1 connectivity and retry experiment. No script access or telemetry yet.
+/// M1 connectivity plus an M2 diagnostic-only script bridge. No script MQTT publishing yet.
 /// </summary>
 [Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule", Id = "OpenSimMQTTDiagnostic")]
 public sealed class MqttDiagnosticModule : INonSharedRegionModule
@@ -22,6 +23,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     private static readonly ILog Log = LogManager.GetLogger(MethodBase.GetCurrentMethod()!.DeclaringType);
     private readonly CancellationTokenSource _stop = new();
     private IMqttClient? _client;
+    private IScriptModuleComms? _scriptComms;
     private Task? _connectionTask;
     private bool _enabled;
     private string _host = "";
@@ -67,6 +69,14 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     {
         if (!_enabled) return;
         Log.Info($"[OpenSimMQTT] RegionLoaded: {scene.RegionInfo.RegionName}");
+        _scriptComms = scene.RequestModuleInterface<IScriptModuleComms>();
+        if (_scriptComms == null)
+            Log.Warn("[OpenSimMQTT] ScriptModuleComms unavailable; diagnostic script ping disabled.");
+        else
+        {
+            _scriptComms.OnScriptCommand += OnScriptCommand;
+            Log.Info("[OpenSimMQTT] Diagnostic script command handler registered.");
+        }
         // Start without waiting on network I/O on the simulator's region thread.
         _connectionTask ??= Task.Run(() => ConnectAndPublishAsync(_stop.Token));
     }
@@ -138,10 +148,34 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         }
     }
 
+    // Diagnostic-only bridge: deliberately does not accept MQTT publish commands.
+    private void OnScriptCommand(UUID scriptId, string requestId, string module, string command, string argument)
+    {
+        if (!string.Equals(module, "OpenSimMQTT", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(command, "ping", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        Log.Info("[OpenSimMQTT] Script ping received; sending targeted reply.");
+        try
+        {
+            // Reserved diagnostic code; link_message key contains the MOD request ID.
+            _scriptComms?.DispatchReply(scriptId, 71001, "OpenSimMQTT:pong", requestId);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("[OpenSimMQTT] Script ping reply failed: " + ex.Message);
+        }
+    }
+
     public void RemoveRegion(Scene scene)
     {
         if (!_enabled) return;
         Log.Info($"[OpenSimMQTT] RemoveRegion: {scene.RegionInfo.RegionName}");
+        if (_scriptComms != null)
+        {
+            _scriptComms.OnScriptCommand -= OnScriptCommand;
+            _scriptComms = null;
+        }
     }
 
     public void Close()
