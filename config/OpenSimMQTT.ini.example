@@ -8,6 +8,7 @@ Enabled = true
 BrokerHost = 172.16.100.5
 BrokerPort = 1883
 UseTLS = false
+ReconnectSeconds = 5
 
 ; Local test username: opensim. Set Password in the simulator's local
 ; SimCustom.ini, not in this tracked example. Test credential is temporary.
