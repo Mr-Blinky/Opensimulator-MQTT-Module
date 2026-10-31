@@ -14,7 +14,7 @@ using OpenSim.Region.Framework.Scenes;
 namespace OpenSim.MQTT;
 
 /// <summary>
-/// M1 connectivity experiment. No script access, telemetry or reconnection yet.
+/// M1 connectivity and retry experiment. No script access or telemetry yet.
 /// </summary>
 [Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule", Id = "OpenSimMQTTDiagnostic")]
 public sealed class MqttDiagnosticModule : INonSharedRegionModule
@@ -28,6 +28,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     private int _port;
     private string _username = "";
     private string _password = "";
+    private int _retrySeconds = 5;
 
     public string Name => "OpenSim MQTT Diagnostic";
     public Type? ReplaceableInterface => null;
@@ -43,14 +44,15 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         _port = config?.GetInt("BrokerPort", 1883) ?? 1883;
         _username = config?.GetString("Username", "") ?? "";
         _password = config?.GetString("Password", "") ?? "";
+        _retrySeconds = config?.GetInt("ReconnectSeconds", 5) ?? 5;
         if (config?.GetBoolean("UseTLS", false) == true)
         {
             Log.Error("[OpenSimMQTT] M1 test build does not support TLS yet; connection disabled.");
             _enabled = false;
         }
-        else if (string.IsNullOrWhiteSpace(_host) || _port < 1 || _port > 65535)
+        else if (string.IsNullOrWhiteSpace(_host) || _port < 1 || _port > 65535 || _retrySeconds < 1 || _retrySeconds > 3600)
         {
-            Log.Error("[OpenSimMQTT] Invalid broker host or port; connection disabled.");
+            Log.Error("[OpenSimMQTT] Invalid broker host, port or retry interval; connection disabled.");
             _enabled = false;
         }
     }
@@ -71,14 +73,14 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
 
     private async Task ConnectAndPublishAsync(CancellationToken token)
     {
+        if (!string.IsNullOrEmpty(_username) && string.IsNullOrEmpty(_password))
+        {
+            Log.Error("[OpenSimMQTT] Username is set but broker password is missing; not connecting.");
+            return;
+        }
+
         try
         {
-            if (!string.IsNullOrEmpty(_username) && string.IsNullOrEmpty(_password))
-            {
-                Log.Error("[OpenSimMQTT] Username is set but broker password is missing; not connecting.");
-                return;
-            }
-
             _client = new MqttFactory().CreateMqttClient();
             var builder = new MqttClientOptionsBuilder()
                 .WithTcpServer(_host, _port)
@@ -88,25 +90,51 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
             if (!string.IsNullOrEmpty(_username))
                 builder.WithCredentials(_username, _password);
 
-            Log.Info($"[OpenSimMQTT] Connecting to MQTT broker {_host}:{_port}");
-            await _client.ConnectAsync(builder.Build(), token);
-            Log.Info("[OpenSimMQTT] MQTT broker connected.");
-
+            var options = builder.Build();
             var message = new MqttApplicationMessageBuilder()
                 .WithTopic("opensim/diagnostic/connection")
                 .WithPayload("online")
                 .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
                 .Build();
-            await _client.PublishAsync(message, token);
-            Log.Info("[OpenSimMQTT] Published diagnostic message to opensim/diagnostic/connection");
+
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    if (!_client.IsConnected)
+                    {
+                        Log.Info($"[OpenSimMQTT] Connecting to MQTT broker {_host}:{_port}");
+                        await _client.ConnectAsync(options, token);
+                        Log.Info("[OpenSimMQTT] MQTT broker connected.");
+                        await _client.PublishAsync(message, token);
+                        Log.Info("[OpenSimMQTT] Published diagnostic message to opensim/diagnostic/connection");
+                    }
+
+                    // Polling also detects disconnections after the initial successful publish.
+                    await Task.Delay(TimeSpan.FromSeconds(1), token);
+                    if (!_client.IsConnected && !token.IsCancellationRequested)
+                        Log.Warn("[OpenSimMQTT] MQTT connection lost; reconnecting.");
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("[OpenSimMQTT] MQTT connection/publish failed: " +
+                        ex.GetType().Name + ": " + ex.Message +
+                        $"; retrying in {_retrySeconds} seconds.");
+                    await Task.Delay(TimeSpan.FromSeconds(_retrySeconds), token);
+                }
+            }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            Log.Info("[OpenSimMQTT] MQTT connection cancelled during shutdown.");
+            // Expected when shutdown cancels the retry delay.
         }
         catch (Exception ex)
         {
-            Log.Error("[OpenSimMQTT] MQTT connection/publish failed: " + ex.GetType().Name + ": " + ex.Message);
+            Log.Error("[OpenSimMQTT] MQTT worker stopped unexpectedly: " + ex);
         }
     }
 
