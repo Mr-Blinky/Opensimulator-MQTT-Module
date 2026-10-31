@@ -42,3 +42,15 @@ An in-world script attempted a publish to `shared/forbidden/test` with payload `
 ```
 
 MQTTX received no message. PASS: this forbidden topic was rejected with a correlated error response; this is not an exhaustive authorization/security test. Next: permitted-topic publish and MQTTX receipt.
+
+## Permitted-topic end-to-end publish — PASS (2026-10-31)
+
+An in-world script published topic `shared/demo/hello` with payload `Hello from OpenSimulator!`. The script reported a matching request ID and received publish-success code 71002, text `OpenSimMQTT:published`.
+
+```text
+[08:52:52] Object: Request ID: e3be10c8-a6ed-457e-b2b3-7ed11c199fe6
+[08:52:52] Object: PASS: MQTT publish succeeded!
+[08:52:52] Object: Response: OpenSimMQTT:published
+```
+
+MQTTX independently received `shared/demo/hello`, QoS 0, payload `Hello from OpenSimulator!` at 2026-10-31 15:52:53.946. PASS: LSL to module to broker to subscriber. The script's earlier informational text still said 'forbidden topic', but the observed MQTTX topic verifies the actual permitted destination. This does not yet establish delivery guarantees beyond QoS 0 or production-ready authorization.
