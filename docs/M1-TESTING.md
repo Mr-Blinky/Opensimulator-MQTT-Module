@@ -32,3 +32,13 @@ For a controlled negative test, MQTT 1 was configured to connect to 172.16.100.5
 ## Status
 
 PASS: initial broker connection, authentication, diagnostic publish, subscriber receipt, and normal simulator startup. Still pending: automatic reconnection and recovery, robust shutdown guarantees, and multiple-region/process testing. M1 is not yet fully complete.
+
+## Broker service outage and automatic recovery — verified 2026-10-31
+
+MQTT 1 remained running while the Mosquitto Windows service was stopped and subsequently restarted. OpenSimulator reported unexpected disconnection at `14:48:45.056`, then connection failures and 5-second retry delays at `14:48:47.120`, `14:48:54.185`, `14:49:01.246`, and `14:49:08.302`. Following broker restoration, OpenSimulator logged:
+
+- `14:49:13.306 INFO [OpenSimMQTT] Connecting to MQTT broker 172.16.100.5:1883`
+- `14:49:13.313 INFO [OpenSimMQTT] MQTT broker connected.`
+- `14:49:13.314 INFO [OpenSimMQTT] Published diagnostic message to opensim/diagnostic/connection`
+
+PASS: disconnected-client detection, retry after connection failure, automatic reconnect, and successful publish API call following reconnect. MQTTX was also disconnected during the outage and did not observe the second message because it reconnected after the QoS 0 non-retained publication. Thus subscriber receipt of the recovery message is **not** independently verified. No simulator restart was required.
