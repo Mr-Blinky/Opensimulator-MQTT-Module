@@ -25,6 +25,10 @@ On normal MQTT 1 shutdown, the OpenSimulator log reported:
 
 PASS: observed module shutdown callbacks and successful broker disconnect. Cleanup is currently asynchronous, so this does not guarantee completion on every process exit.
 
+## Broker-unavailable startup — verified 2026-10-31
+
+For a controlled negative test, MQTT 1 was configured to connect to 172.16.100.5:1884 instead of the working 1883 port. The region became ready at `14:38:06.783`; the module logged `MqttCommunicationException` connecting to port 1884 at `14:38:08.489`. PASS: broker connection failure did not prevent region readiness. This does not yet test recovery/retry. Restore port 1883 after testing.
+
 ## Status
 
-PASS: initial broker connection, authentication, diagnostic publish, subscriber receipt, and normal simulator startup. Still pending: broker outage/nonblocking behavior, reconnection, robust shutdown guarantees, and multiple-region/process testing. M1 is not yet fully complete.
+PASS: initial broker connection, authentication, diagnostic publish, subscriber receipt, and normal simulator startup. Still pending: automatic reconnection and recovery, robust shutdown guarantees, and multiple-region/process testing. M1 is not yet fully complete.
