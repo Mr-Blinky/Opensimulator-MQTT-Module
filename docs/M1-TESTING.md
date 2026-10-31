@@ -15,6 +15,16 @@ Environment: OpenSimulator 0.9.3.1 Nessie Dev (.NET 8), MQTTnet 4.3.7.1207, Mosq
   - `14:25:02.713 DEBUG [RegionReady]: Region "MQTT 1" is ready`
 - MQTTX independently received topic `opensim/diagnostic/connection`, QoS 0, payload `online` (user-confirmed 2026-10-31 14:25:03).
 
+## Graceful shutdown — verified 2026-10-31
+
+On normal MQTT 1 shutdown, the OpenSimulator log reported:
+
+- `14:30:38.961 INFO [OpenSimMQTT] RemoveRegion: MQTT 1`
+- `14:30:38.962 INFO [OpenSimMQTT] Close`
+- `14:30:38.992 INFO [OpenSimMQTT] MQTT broker disconnected.`
+
+PASS: observed module shutdown callbacks and successful broker disconnect. Cleanup is currently asynchronous, so this does not guarantee completion on every process exit.
+
 ## Status
 
-PASS: initial broker connection, authentication, diagnostic publish, subscriber receipt, and normal simulator startup. Still pending: clean disconnect verification, broker outage/nonblocking behavior, reconnection, and multiple-region/process testing. M1 is not yet fully complete.
+PASS: initial broker connection, authentication, diagnostic publish, subscriber receipt, and normal simulator startup. Still pending: broker outage/nonblocking behavior, reconnection, robust shutdown guarantees, and multiple-region/process testing. M1 is not yet fully complete.
