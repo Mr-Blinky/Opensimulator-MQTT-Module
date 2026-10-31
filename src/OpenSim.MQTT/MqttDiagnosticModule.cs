@@ -2,6 +2,8 @@ using System;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
+using System.Threading.Channels;
 using log4net;
 using Nini.Config;
 using Mono.Addins;
@@ -15,7 +17,7 @@ using OpenSim.Region.Framework.Scenes;
 namespace OpenSim.MQTT;
 
 /// <summary>
-/// M1 connectivity plus an M2 diagnostic-only script bridge. No script MQTT publishing yet.
+/// M1 connectivity plus an M2 restricted script publishing bridge.
 /// </summary>
 [Extension(Path = "/OpenSim/RegionModules", NodeName = "RegionModule", Id = "OpenSimMQTTDiagnostic")]
 public sealed class MqttDiagnosticModule : INonSharedRegionModule
@@ -25,6 +27,10 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     private IMqttClient? _client;
     private IScriptModuleComms? _scriptComms;
     private Task? _connectionTask;
+    private Task? _publishTask;
+    private readonly Channel<PublishRequest> _publishQueue = Channel.CreateBounded<PublishRequest>(
+        new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = false });
+    private sealed record PublishRequest(UUID ScriptId, string RequestId, string Topic, string Payload);
     private bool _enabled;
     private string _host = "";
     private int _port;
@@ -79,6 +85,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         }
         // Start without waiting on network I/O on the simulator's region thread.
         _connectionTask ??= Task.Run(() => ConnectAndPublishAsync(_stop.Token));
+        _publishTask ??= Task.Run(() => ProcessPublishQueueAsync(_stop.Token));
     }
 
     private async Task ConnectAndPublishAsync(CancellationToken token)
@@ -148,23 +155,79 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         }
     }
 
-    // Diagnostic-only bridge: deliberately does not accept MQTT publish commands.
+    // Script-originated publishing is restricted to a small diagnostic namespace.
     private void OnScriptCommand(UUID scriptId, string requestId, string module, string command, string argument)
     {
-        if (!string.Equals(module, "OpenSimMQTT", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(command, "ping", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(module, "OpenSimMQTT", StringComparison.OrdinalIgnoreCase)) return;
+        if (string.Equals(command, "ping", StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Info("[OpenSimMQTT] Script ping received; sending targeted reply.");
+            Reply(scriptId, 71001, "OpenSimMQTT:pong", requestId);
             return;
+        }
+        if (!string.Equals(command, "publish", StringComparison.OrdinalIgnoreCase)) return;
 
-        Log.Info("[OpenSimMQTT] Script ping received; sending targeted reply.");
+        int separator = argument?.IndexOf('\\n') ?? -1;
+        if (separator < 1)
+        {
+            Reply(scriptId, 71003, "Invalid publish argument", requestId);
+            return;
+        }
+        string topic = argument!.Substring(0, separator);
+        string payload = argument.Substring(separator + 1);
+        if (!topic.StartsWith("shared/demo/", StringComparison.Ordinal) ||
+            topic.Length <= "shared/demo/".Length || topic.IndexOfAny(new[] { '#', '+', '\\0' }) >= 0 ||
+            topic.Contains("//", StringComparison.Ordinal) || Encoding.UTF8.GetByteCount(topic) > 256 ||
+            Encoding.UTF8.GetByteCount(payload) > 1024)
+        {
+            Reply(scriptId, 71003, "Topic or payload rejected", requestId);
+            return;
+        }
+        if (_client?.IsConnected != true)
+        {
+            Reply(scriptId, 71003, "Broker disconnected", requestId);
+            return;
+        }
+        if (!_publishQueue.Writer.TryWrite(new PublishRequest(scriptId, requestId, topic, payload)))
+        {
+            Reply(scriptId, 71003, "Publish queue full", requestId);
+        }
+    }
+
+    private async Task ProcessPublishQueueAsync(CancellationToken token)
+    {
         try
         {
-            // Reserved diagnostic code; link_message key contains the MOD request ID.
-            _scriptComms?.DispatchReply(scriptId, 71001, "OpenSimMQTT:pong", requestId);
+            await foreach (var request in _publishQueue.Reader.ReadAllAsync(token))
+            {
+                try
+                {
+                    if (_client?.IsConnected != true)
+                        throw new InvalidOperationException("Broker disconnected");
+                    var message = new MqttApplicationMessageBuilder()
+                        .WithTopic(request.Topic)
+                        .WithPayload(request.Payload)
+                        .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
+                        .WithRetainFlag(false)
+                        .Build();
+                    await _client.PublishAsync(message, token);
+                    Reply(request.ScriptId, 71002, "OpenSimMQTT:published", request.RequestId);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
+                catch (Exception ex)
+                {
+                    Log.Warn("[OpenSimMQTT] Script publish failed: " + ex.Message);
+                    Reply(request.ScriptId, 71003, "Publish failed", request.RequestId);
+                }
+            }
         }
-        catch (Exception ex)
-        {
-            Log.Warn("[OpenSimMQTT] Script ping reply failed: " + ex.Message);
-        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+    }
+
+    private void Reply(UUID scriptId, int code, string message, string requestId)
+    {
+        try { _scriptComms?.DispatchReply(scriptId, code, message, requestId); }
+        catch (Exception ex) { Log.Warn("[OpenSimMQTT] Script reply failed: " + ex.Message); }
     }
 
     public void RemoveRegion(Scene scene)
@@ -183,12 +246,14 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         if (!_enabled) return;
         Log.Info("[OpenSimMQTT] Close");
         _stop.Cancel();
+        _publishQueue.Writer.TryComplete();
         // Never synchronously wait for broker operations on the region shutdown thread.
         _ = Task.Run(async () =>
         {
             try
             {
                 if (_connectionTask != null) await _connectionTask;
+                if (_publishTask != null) await _publishTask;
                 if (_client?.IsConnected == true)
                 {
                     await _client.DisconnectAsync();
