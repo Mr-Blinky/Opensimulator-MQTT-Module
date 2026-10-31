@@ -54,3 +54,32 @@ An in-world script published topic `shared/demo/hello` with payload `Hello from 
 ```
 
 MQTTX independently received `shared/demo/hello`, QoS 0, payload `Hello from OpenSimulator!` at 2026-10-31 15:52:53.946. PASS: LSL to module to broker to subscriber. The script's earlier informational text still said 'forbidden topic', but the observed MQTTX topic verifies the actual permitted destination. This does not yet establish delivery guarantees beyond QoS 0 or production-ready authorization.
+
+## M2.5 broker-disconnected script publishing and recovery — PASS (2026-10-31)
+
+Controlled test on MQTT 1 using the existing deployed module and existing in-world publish script. Mosquitto at `172.16.100.5:1883` was stopped and subsequently restarted. MQTT 2 was untouched; no module changes or simulator restart were required.
+
+- At 16:02:28, OpenSimulator logged `MQTT connection lost; reconnecting.` and began retrying. Repeated connection failures were logged with a configured five-second delay after each failed attempt.
+- While disconnected, the script attempted a permitted publish and received a rejection:
+
+```text
+[09:04:16] Object: Requested publish to topic.
+[09:04:16] Object: Request ID: fb1bcaa6-6e77-4059-9a5f-38e6f4518d62
+[09:04:16] Object: FAIL: MQTT publish rejected.
+[09:04:16] Object: Reason: Broker disconnected
+```
+
+- No additional OpenSimulator log errors were reported for this script request. The script responded while the broker was unavailable. The LSL informational message was clarified from 'forbidden topic' to 'topic'; this was only a script text change.
+- After Mosquitto restarted, OpenSimulator logged a successful connection at 16:07:04.414 and reported publishing the diagnostic `online` message at 16:07:04.416. MQTTX did not independently capture that QoS 0 nonretained diagnostic.
+- The same script published again after recovery:
+
+```text
+[09:09:29] Object: Requested publish to topic.
+[09:09:29] Object: Request ID: 1fc946ec-817a-46d3-a1f4-d55477d20d2a
+[09:09:29] Object: PASS: MQTT publish succeeded!
+[09:09:29] Object: Response: OpenSimMQTT:published
+```
+
+- MQTTX independently received topic `shared/demo/hello`, QoS 0, payload `Hello from OpenSimulator!` at 2026-10-31 16:09:31.817.
+
+**PASS:** Broker loss detection, continuing retry attempts, script-level disconnected rejection, automatic reconnection, and end-to-end script publication after recovery. The simulator and script remained responsive in the observed test. **Not established:** bounded queue behaviour under sustained load or races during disconnection, exhaustive request-correlation testing, and production security guarantees. These remain separate tests.
