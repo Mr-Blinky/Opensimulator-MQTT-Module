@@ -11,6 +11,10 @@
     <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="OpenMetaverseTypes">
+      <HintPath>$(OpenSimBinPath)\OpenMetaverseTypes.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="OpenSim.Region.Framework">
       <HintPath>$(OpenSimBinPath)\OpenSim.Region.Framework.dll</HintPath>
       <Private>false</Private>
