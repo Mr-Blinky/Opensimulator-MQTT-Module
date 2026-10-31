@@ -91,3 +91,9 @@ On MQTT 1, a new YEngine LSL script submitted 10 rapid `modSendCommand("OpenSimM
 Observed in-world chat at 09:19:21: 10 request IDs were printed; the script reported `Requests sent: 10`, `Successful: 10`, `Rejected: 0`. MQTTX independently received all 10 sequential messages (QoS 0), including message 10 at 2026-10-31 16:19:22.041. The script completed normally.
 
 **PASS:** Baseline rapid-burst publishing and independent subscriber receipt of all 10 messages. **Not yet verified:** queue saturation/overflow behaviour at capacity 32, per-request response ID correlation (the burst script counted replies without matching IDs), and sustained-load responsiveness. No C# changes were required.
+
+## M2.7 controlled 40-message publish burst — PASS (2026-10-31)
+
+With MQTT 1 running and Mosquitto online, the existing LSL burst script was changed to submit 40 requests to `shared/demo/burst`. In-world chat at 09:21:46 listed request IDs for all 40 submissions and reported `Requests sent: 40`, `Successful: 40`, `Rejected: 0`. MQTTX independently received 40 sequential messages, including `M2.6 Test Message 40` (the test script's label was not updated).
+
+**PASS:** All 40 requests returned success and all 40 publications were observed at MQTTX. **Not proven:** The 32-slot queue was ever full; its worker can drain requests during submission. Queue overflow/rejection, request-ID correlation, and sustained-load behaviour remain unverified. No C# module changes.
