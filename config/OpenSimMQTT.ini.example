@@ -1,9 +1,16 @@
-; M0 diagnostic only: no broker connection is attempted.
-; Include this configuration in your simulator's OpenSim configuration.
+; M0 diagnostic module configuration. MQTT connectivity is planned for M1.
+; Include this section in a configuration file actually loaded by OpenSimulator.
 [OpenSimMQTT]
 Enabled = true
 
-; Reserved for M1. TLS is optional and disabled for LAN testing.
-BrokerHost = 127.0.0.1
+; Confirmed local test broker (2026-10-31): 172.16.100.5:1883.
+; Port 1883 is the standard plaintext MQTT listener; TLS is disabled for LAN testing.
+BrokerHost = 172.16.100.5
 BrokerPort = 1883
 UseTLS = false
+
+; Local test account username: opensim.
+; Do not commit the test password to source control; configure it locally
+; or supply it through an environment variable when M1 authentication is implemented.
+Username = opensim
+PasswordEnvironmentVariable = OPENSIM_MQTT_PASSWORD
