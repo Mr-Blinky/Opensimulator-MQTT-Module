@@ -7,6 +7,9 @@
     <OpenSimBinPath Condition="'$(OpenSimBinPath)' == ''">D:\Opensim\Builds\rev-latest</OpenSimBinPath>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="OpenSim.Region.Framework">
       <HintPath>$(OpenSimBinPath)\OpenSim.Region.Framework.dll</HintPath>
       <Private>false</Private>
