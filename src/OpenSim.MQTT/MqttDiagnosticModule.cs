@@ -167,7 +167,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         }
         if (!string.Equals(command, "publish", StringComparison.OrdinalIgnoreCase)) return;
 
-        int separator = argument?.IndexOf('\\n') ?? -1;
+        int separator = argument?.IndexOf('\n') ?? -1;
         if (separator < 1)
         {
             Reply(scriptId, 71003, "Invalid publish argument", requestId);
@@ -176,7 +176,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         string topic = argument!.Substring(0, separator);
         string payload = argument.Substring(separator + 1);
         if (!topic.StartsWith("shared/demo/", StringComparison.Ordinal) ||
-            topic.Length <= "shared/demo/".Length || topic.IndexOfAny(new[] { '#', '+', '\\0' }) >= 0 ||
+            topic.Length <= "shared/demo/".Length || topic.IndexOfAny(new[] { '#', '+', '\0' }) >= 0 ||
             topic.Contains("//", StringComparison.Ordinal) || Encoding.UTF8.GetByteCount(topic) > 256 ||
             Encoding.UTF8.GetByteCount(payload) > 1024)
         {
