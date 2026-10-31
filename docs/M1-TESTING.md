@@ -42,3 +42,14 @@ MQTT 1 remained running while the Mosquitto Windows service was stopped and subs
 - `14:49:13.314 INFO [OpenSimMQTT] Published diagnostic message to opensim/diagnostic/connection`
 
 PASS: disconnected-client detection, retry after connection failure, automatic reconnect, and successful publish API call following reconnect. MQTTX was also disconnected during the outage and did not observe the second message because it reconnected after the QoS 0 non-retained publication. Thus subscriber receipt of the recovery message is **not** independently verified. No simulator restart was required.
+
+## Shutdown following successful recovery — verified 2026-10-31
+
+After the broker outage and automatic reconnection, MQTT 1 was shut down normally:
+
+- `14:52:56.259 INFO [OpenSimMQTT] RemoveRegion: MQTT 1`
+- `14:52:56.260 INFO [OpenSimMQTT] Close`
+- `14:52:56.278 INFO [OpenSimMQTT] MQTT broker disconnected.`
+- `14:52:57.234 INFO [SHUTDOWN]: Shutdown processing on main thread complete. Exiting...`
+
+PASS: observed successful broker disconnection after reconnection and before simulator exit. Core M1 connection-management single-region test suite passed. Asynchronous shutdown remains best-effort rather than a formal completion guarantee. Multi-region tests, script API, TLS, and production hardening remain out of scope/not verified.
