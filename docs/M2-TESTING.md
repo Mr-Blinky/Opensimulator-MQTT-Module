@@ -27,3 +27,18 @@ Observed chat:
 ```
 
 No isolation-listener link_message output appeared. PASS: in this two-script, same-prim runtime test, the diagnostic reply reached the requesting script and was not observed by the second script. This does not establish isolation under every lifecycle or race condition; reset/deletion tests remain outstanding.
+
+## Restricted publish deployment and forbidden-topic test — PASS (2026-10-31)
+
+Release build of commit 66b832e succeeded with zero warnings and zero errors. The updated module was deployed to MQTT 1. At 15:45:34–15:45:35 it initialized, registered its script command handler, connected to the broker, and published the existing online diagnostic. MQTTX received the online diagnostic at 15:45:36.731.
+
+An in-world script attempted a publish to `shared/forbidden/test` with payload `THIS MESSAGE MUST NOT BE PUBLISHED` while MQTTX subscribed to `shared/#`.
+
+```text
+[08:49:41] Object: Requested publish to forbidden topic.
+[08:49:41] Object: Request ID: 490d645e-c389-4b9c-891f-b3c778d92880
+[08:49:41] Object: PASS: Forbidden publish rejected.
+[08:49:41] Object: Reason: Topic or payload rejected
+```
+
+MQTTX received no message. PASS: this forbidden topic was rejected with a correlated error response; this is not an exhaustive authorization/security test. Next: permitted-topic publish and MQTTX receipt.
