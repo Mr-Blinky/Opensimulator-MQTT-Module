@@ -83,3 +83,11 @@ Controlled test on MQTT 1 using the existing deployed module and existing in-wor
 - MQTTX independently received topic `shared/demo/hello`, QoS 0, payload `Hello from OpenSimulator!` at 2026-10-31 16:09:31.817.
 
 **PASS:** Broker loss detection, continuing retry attempts, script-level disconnected rejection, automatic reconnection, and end-to-end script publication after recovery. The simulator and script remained responsive in the observed test. **Not established:** bounded queue behaviour under sustained load or races during disconnection, exhaustive request-correlation testing, and production security guarantees. These remain separate tests.
+
+## M2.6 controlled 10-message publish burst — PASS (2026-10-31)
+
+On MQTT 1, a new YEngine LSL script submitted 10 rapid `modSendCommand("OpenSimMQTT", "publish", ...)` requests to topic `shared/demo/burst` with payloads `M2.6 Test Message 1` through `M2.6 Test Message 10`. The script compiled and ran successfully.
+
+Observed in-world chat at 09:19:21: 10 request IDs were printed; the script reported `Requests sent: 10`, `Successful: 10`, `Rejected: 0`. MQTTX independently received all 10 sequential messages (QoS 0), including message 10 at 2026-10-31 16:19:22.041. The script completed normally.
+
+**PASS:** Baseline rapid-burst publishing and independent subscriber receipt of all 10 messages. **Not yet verified:** queue saturation/overflow behaviour at capacity 32, per-request response ID correlation (the burst script counted replies without matching IDs), and sustained-load responsiveness. No C# changes were required.
