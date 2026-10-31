@@ -27,7 +27,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     private string _host = "";
     private int _port;
     private string _username = "";
-    private string _passwordVariable = "";
+    private string _password = "";
 
     public string Name => "OpenSim MQTT Diagnostic";
     public Type? ReplaceableInterface => null;
@@ -42,7 +42,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         _host = config?.GetString("BrokerHost", "127.0.0.1") ?? "127.0.0.1";
         _port = config?.GetInt("BrokerPort", 1883) ?? 1883;
         _username = config?.GetString("Username", "") ?? "";
-        _passwordVariable = config?.GetString("PasswordEnvironmentVariable", "OPENSIM_MQTT_PASSWORD") ?? "OPENSIM_MQTT_PASSWORD";
+        _password = config?.GetString("Password", "") ?? "";
         if (config?.GetBoolean("UseTLS", false) == true)
         {
             Log.Error("[OpenSimMQTT] M1 test build does not support TLS yet; connection disabled.");
@@ -73,10 +73,9 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     {
         try
         {
-            var password = Environment.GetEnvironmentVariable(_passwordVariable);
-            if (!string.IsNullOrEmpty(_username) && string.IsNullOrEmpty(password))
+            if (!string.IsNullOrEmpty(_username) && string.IsNullOrEmpty(_password))
             {
-                Log.Error($"[OpenSimMQTT] Missing broker password environment variable {_passwordVariable}; not connecting.");
+                Log.Error("[OpenSimMQTT] Username is set but broker password is missing; not connecting.");
                 return;
             }
 
@@ -87,7 +86,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                 .WithProtocolVersion(MQTTnet.Formatter.MqttProtocolVersion.V311)
                 .WithCleanSession();
             if (!string.IsNullOrEmpty(_username))
-                builder.WithCredentials(_username, password!);
+                builder.WithCredentials(_username, _password);
 
             Log.Info($"[OpenSimMQTT] Connecting to MQTT broker {_host}:{_port}");
             await _client.ConnectAsync(builder.Build(), token);
