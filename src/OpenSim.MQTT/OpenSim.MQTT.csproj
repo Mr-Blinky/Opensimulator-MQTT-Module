@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <OpenSimBinPath Condition="'$(OpenSimBinPath)' == ''">D:\Opensim\Builds\rev-latest</OpenSimBinPath>
   </PropertyGroup>
   <ItemGroup>
