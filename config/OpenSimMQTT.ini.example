@@ -9,8 +9,7 @@ BrokerHost = 172.16.100.5
 BrokerPort = 1883
 UseTLS = false
 
-; Local test account username: opensim.
-; Do not commit the test password to source control; configure it locally
-; or supply it through an environment variable when M1 authentication is implemented.
+; Local test username: opensim. Set Password in the simulator's local
+; SimCustom.ini, not in this tracked example. Test credential is temporary.
 Username = opensim
-PasswordEnvironmentVariable = OPENSIM_MQTT_PASSWORD
+Password =
