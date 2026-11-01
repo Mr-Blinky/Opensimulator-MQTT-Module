@@ -214,8 +214,8 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                     payloadElement.ValueKind != JsonValueKind.String)
                     return false;
 
-                if (root.TryGetProperty("qos", out var qos) &&
-                    (qos.ValueKind != JsonValueKind.Number || !qos.TryGetInt32(out int level) || (level != 0 && level != 1)))
+                if (root.TryGetProperty("qos", out var qosElement) &&
+                    (qosElement.ValueKind != JsonValueKind.Number || !qosElement.TryGetInt32(out int level) || (level != 0 && level != 1)))
                     return false;
                 if (root.TryGetProperty("retain", out var retain) &&
                     retain.ValueKind != JsonValueKind.False)
