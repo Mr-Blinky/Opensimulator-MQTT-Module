@@ -31,7 +31,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     private Task? _publishTask;
     private readonly Channel<PublishRequest> _publishQueue = Channel.CreateBounded<PublishRequest>(
         new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = false });
-    private sealed record PublishRequest(UUID ScriptId, string RequestId, string Topic, string Payload);
+    private sealed record PublishRequest(UUID ScriptId, string RequestId, string Topic, string Payload, int Qos);
     private bool _enabled;
     private string _host = "";
     private int _port;
@@ -168,7 +168,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         }
         if (!string.Equals(command, "publish", StringComparison.OrdinalIgnoreCase)) return;
 
-        if (!TryParsePublishArgument(argument, out string topic, out string payload))
+        if (!TryParsePublishArgument(argument, out string topic, out string payload, out int qos))
         {
             Reply(scriptId, 71003, "Invalid publish argument", requestId);
             return;
@@ -186,18 +186,19 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
             Reply(scriptId, 71003, "Broker disconnected", requestId);
             return;
         }
-        if (!_publishQueue.Writer.TryWrite(new PublishRequest(scriptId, requestId, topic, payload)))
+        if (!_publishQueue.Writer.TryWrite(new PublishRequest(scriptId, requestId, topic, payload, qos)))
         {
             Reply(scriptId, 71003, "Publish queue full", requestId);
         }
     }
 
     // Accept the original newline format and a JSON object with explicit publishing options.
-    // QoS 1 and retained publishing are deliberately not enabled in this step.
-    private static bool TryParsePublishArgument(string? argument, out string topic, out string payload)
+    // Retained publishing is deliberately not enabled in this step.
+    private static bool TryParsePublishArgument(string? argument, out string topic, out string payload, out int qos)
     {
         topic = "";
         payload = "";
+        qos = 0;
         if (string.IsNullOrEmpty(argument)) return false;
 
         if (argument.TrimStart().StartsWith("{", StringComparison.Ordinal))
@@ -214,12 +215,14 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                     return false;
 
                 if (root.TryGetProperty("qos", out var qos) &&
-                    (qos.ValueKind != JsonValueKind.Number || !qos.TryGetInt32(out int level) || level != 0))
+                    (qos.ValueKind != JsonValueKind.Number || !qos.TryGetInt32(out int level) || (level != 0 && level != 1)))
                     return false;
                 if (root.TryGetProperty("retain", out var retain) &&
                     retain.ValueKind != JsonValueKind.False)
                     return false;
 
+                if (root.TryGetProperty("qos", out var requestedQos))
+                    qos = requestedQos.GetInt32();
                 topic = topicElement.GetString() ?? "";
                 payload = payloadElement.GetString() ?? "";
                 return true;
@@ -250,7 +253,9 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                     var message = new MqttApplicationMessageBuilder()
                         .WithTopic(request.Topic)
                         .WithPayload(request.Payload)
-                        .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
+                        .WithQualityOfServiceLevel(request.Qos == 1
+                            ? MqttQualityOfServiceLevel.AtLeastOnce
+                            : MqttQualityOfServiceLevel.AtMostOnce)
                         .WithRetainFlag(false)
                         .Build();
                     await _client.PublishAsync(message, token);
