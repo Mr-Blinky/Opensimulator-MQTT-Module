@@ -262,7 +262,14 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                             : MqttQualityOfServiceLevel.AtMostOnce)
                         .WithRetainFlag(request.Retain)
                         .Build();
-                    await _client.PublishAsync(message, token);
+                    var result = await _client.PublishAsync(message, token);
+                    if (!result.IsSuccess)
+                    {
+                        Log.Warn("[OpenSimMQTT] Broker rejected script publish: " + result.ReasonCode);
+                        Reply(request.ScriptId, 71003, "Publish failed", request.RequestId);
+                        continue;
+                    }
+                    // QoS 0 has no broker acknowledgement; QoS 1 completes after PUBACK.
                     Reply(request.ScriptId, 71002, "OpenSimMQTT:published", request.RequestId);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
