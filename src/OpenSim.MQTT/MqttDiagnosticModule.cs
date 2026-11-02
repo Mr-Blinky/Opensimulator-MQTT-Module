@@ -29,6 +29,10 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     private IScriptModuleComms? _scriptComms;
     private Task? _connectionTask;
     private Task? _publishTask;
+    private Task? _subscribeTask;
+    private readonly Channel<SubscribeRequest> _subscribeQueue = Channel.CreateBounded<SubscribeRequest>(
+        new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = false });
+    private sealed record SubscribeRequest(UUID ScriptId, string RequestId, string Topic);
     private readonly Channel<PublishRequest> _publishQueue = Channel.CreateBounded<PublishRequest>(
         new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = false });
     private sealed record PublishRequest(UUID ScriptId, string RequestId, string Topic, string Payload, int Qos, bool Retain);
@@ -87,6 +91,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         // Start without waiting on network I/O on the simulator's region thread.
         _connectionTask ??= Task.Run(() => ConnectAndPublishAsync(_stop.Token));
         _publishTask ??= Task.Run(() => ProcessPublishQueueAsync(_stop.Token));
+        _subscribeTask ??= Task.Run(() => ProcessSubscribeQueueAsync(_stop.Token));
     }
 
     private async Task ConnectAndPublishAsync(CancellationToken token)
@@ -164,6 +169,27 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         {
             Log.Info("[OpenSimMQTT] Script ping received; sending targeted reply.");
             Reply(scriptId, 71001, "OpenSimMQTT:pong", requestId);
+            return;
+        }
+        if (string.Equals(command, "subscribe", StringComparison.OrdinalIgnoreCase))
+        {
+            string topic = argument ?? "";
+            if (!topic.StartsWith("shared/demo/", StringComparison.Ordinal) ||
+                topic.Length <= "shared/demo/".Length ||
+                topic.IndexOfAny(new[] { '#', '+', '\0' }) >= 0 ||
+                topic.Contains("//", StringComparison.Ordinal) ||
+                Encoding.UTF8.GetByteCount(topic) > 256)
+            {
+                Reply(scriptId, 71003, "Subscription topic rejected", requestId);
+                return;
+            }
+            if (_client?.IsConnected != true)
+            {
+                Reply(scriptId, 71003, "Broker disconnected", requestId);
+                return;
+            }
+            if (!_subscribeQueue.Writer.TryWrite(new SubscribeRequest(scriptId, requestId, topic)))
+                Reply(scriptId, 71003, "Subscribe queue full", requestId);
             return;
         }
         if (!string.Equals(command, "publish", StringComparison.OrdinalIgnoreCase)) return;
@@ -283,6 +309,40 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 
+    // M3.1: broker subscription acknowledgement only. Incoming dispatch and registry follow.
+    private async Task ProcessSubscribeQueueAsync(CancellationToken token)
+    {
+        try
+        {
+            await foreach (var request in _subscribeQueue.Reader.ReadAllAsync(token))
+            {
+                try
+                {
+                    if (_client?.IsConnected != true)
+                        throw new InvalidOperationException("Broker disconnected");
+                    var options = new MqttClientSubscribeOptionsBuilder()
+                        .WithTopicFilter(request.Topic, MqttQualityOfServiceLevel.AtMostOnce)
+                        .Build();
+                    var result = await _client.SubscribeAsync(options, token);
+                    if (result.Items.Count == 0 || (int)result.Items[0].ResultCode >= 128)
+                    {
+                        Log.Warn("[OpenSimMQTT] Broker rejected script subscribe.");
+                        Reply(request.ScriptId, 71003, "Subscribe failed", request.RequestId);
+                        continue;
+                    }
+                    Reply(request.ScriptId, 71004, "OpenSimMQTT:subscribed", request.RequestId);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
+                catch (Exception ex)
+                {
+                    Log.Warn("[OpenSimMQTT] Script subscribe failed: " + ex.Message);
+                    Reply(request.ScriptId, 71003, "Subscribe failed", request.RequestId);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+    }
+
     private void Reply(UUID scriptId, int code, string message, string requestId)
     {
         try { _scriptComms?.DispatchReply(scriptId, code, message, requestId); }
@@ -306,6 +366,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         Log.Info("[OpenSimMQTT] Close");
         _stop.Cancel();
         _publishQueue.Writer.TryComplete();
+        _subscribeQueue.Writer.TryComplete();
         // Never synchronously wait for broker operations on the region shutdown thread.
         _ = Task.Run(async () =>
         {
@@ -313,6 +374,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
             {
                 if (_connectionTask != null) await _connectionTask;
                 if (_publishTask != null) await _publishTask;
+                if (_subscribeTask != null) await _subscribeTask;
                 if (_client?.IsConnected == true)
                 {
                     await _client.DisconnectAsync();
