@@ -173,14 +173,14 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         }
         if (string.Equals(command, "subscribe", StringComparison.OrdinalIgnoreCase))
         {
-            string topic = argument ?? "";
-            if (!topic.StartsWith("shared/demo/", StringComparison.Ordinal) ||
-                topic.Length <= "shared/demo/".Length ||
-                topic.IndexOfAny(new[] { '#', '+', '\0' }) >= 0 ||
-                topic.Contains("//", StringComparison.Ordinal) ||
-                Encoding.UTF8.GetByteCount(topic) > 256)
+            string subscriptionTopic = argument ?? "";
+            if (!subscriptionTopic.StartsWith("shared/demo/", StringComparison.Ordinal) ||
+                subscriptionTopic.Length <= "shared/demo/".Length ||
+                subscriptionTopic.IndexOfAny(new[] { '#', '+', '\0' }) >= 0 ||
+                subscriptionTopic.Contains("//", StringComparison.Ordinal) ||
+                Encoding.UTF8.GetByteCount(subscriptionTopic) > 256)
             {
-                Reply(scriptId, 71003, "Subscription topic rejected", requestId);
+                Reply(scriptId, 71003, "Subscription subscriptionTopic rejected", requestId);
                 return;
             }
             if (_client?.IsConnected != true)
@@ -188,7 +188,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                 Reply(scriptId, 71003, "Broker disconnected", requestId);
                 return;
             }
-            if (!_subscribeQueue.Writer.TryWrite(new SubscribeRequest(scriptId, requestId, topic)))
+            if (!_subscribeQueue.Writer.TryWrite(new SubscribeRequest(scriptId, requestId, subscriptionTopic)))
                 Reply(scriptId, 71003, "Subscribe queue full", requestId);
             return;
         }
@@ -324,7 +324,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                         .WithTopicFilter(request.Topic, MqttQualityOfServiceLevel.AtMostOnce)
                         .Build();
                     var result = await _client.SubscribeAsync(options, token);
-                    if (result.Items.Count == 0 || (int)result.Items[0].ResultCode >= 128)
+                    if (result.Items.Count == 0 || System.Linq.Enumerable.Any(result.Items, item => (int)item.ResultCode >= 128))
                     {
                         Log.Warn("[OpenSimMQTT] Broker rejected script subscribe.");
                         Reply(request.ScriptId, 71003, "Subscribe failed", request.RequestId);
