@@ -180,7 +180,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                 subscriptionTopic.Contains("//", StringComparison.Ordinal) ||
                 Encoding.UTF8.GetByteCount(subscriptionTopic) > 256)
             {
-                Reply(scriptId, 71003, "Subscription subscriptionTopic rejected", requestId);
+                Reply(scriptId, 71003, "Subscription topic rejected", requestId);
                 return;
             }
             if (_client?.IsConnected != true)
