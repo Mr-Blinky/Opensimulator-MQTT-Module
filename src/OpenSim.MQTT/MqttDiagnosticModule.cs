@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using log4net;
 using Nini.Config;
@@ -30,7 +31,7 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
     private Task? _publishTask;
     private readonly Channel<PublishRequest> _publishQueue = Channel.CreateBounded<PublishRequest>(
         new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = false });
-    private sealed record PublishRequest(UUID ScriptId, string RequestId, string Topic, string Payload);
+    private sealed record PublishRequest(UUID ScriptId, string RequestId, string Topic, string Payload, int Qos, bool Retain);
     private bool _enabled;
     private string _host = "";
     private int _port;
@@ -167,14 +168,11 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
         }
         if (!string.Equals(command, "publish", StringComparison.OrdinalIgnoreCase)) return;
 
-        int separator = argument?.IndexOf('\n') ?? -1;
-        if (separator < 1)
+        if (!TryParsePublishArgument(argument, out string topic, out string payload, out int qos, out bool retain))
         {
             Reply(scriptId, 71003, "Invalid publish argument", requestId);
             return;
         }
-        string topic = argument!.Substring(0, separator);
-        string payload = argument.Substring(separator + 1);
         if (!topic.StartsWith("shared/demo/", StringComparison.Ordinal) ||
             topic.Length <= "shared/demo/".Length || topic.IndexOfAny(new[] { '#', '+', '\0' }) >= 0 ||
             topic.Contains("//", StringComparison.Ordinal) || Encoding.UTF8.GetByteCount(topic) > 256 ||
@@ -188,10 +186,62 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
             Reply(scriptId, 71003, "Broker disconnected", requestId);
             return;
         }
-        if (!_publishQueue.Writer.TryWrite(new PublishRequest(scriptId, requestId, topic, payload)))
+        if (!_publishQueue.Writer.TryWrite(new PublishRequest(scriptId, requestId, topic, payload, qos, retain)))
         {
             Reply(scriptId, 71003, "Publish queue full", requestId);
         }
+    }
+
+    // Accept the original newline format and a JSON object with explicit publishing options.
+    private static bool TryParsePublishArgument(string? argument, out string topic, out string payload, out int qos, out bool retain)
+    {
+        topic = "";
+        payload = "";
+        qos = 0;
+        retain = false;
+        if (string.IsNullOrEmpty(argument)) return false;
+
+        if (argument.TrimStart().StartsWith("{", StringComparison.Ordinal))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(argument);
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object ||
+                    !root.TryGetProperty("topic", out var topicElement) ||
+                    topicElement.ValueKind != JsonValueKind.String ||
+                    !root.TryGetProperty("payload", out var payloadElement) ||
+                    payloadElement.ValueKind != JsonValueKind.String)
+                    return false;
+
+                if (root.TryGetProperty("qos", out var qosElement) &&
+                    (qosElement.ValueKind != JsonValueKind.Number || !qosElement.TryGetInt32(out int level) || (level != 0 && level != 1)))
+                    return false;
+                if (root.TryGetProperty("retain", out var retainElement))
+                {
+                    if (retainElement.ValueKind != JsonValueKind.True &&
+                        retainElement.ValueKind != JsonValueKind.False)
+                        return false;
+                    retain = retainElement.GetBoolean();
+                }
+
+                if (root.TryGetProperty("qos", out var requestedQos))
+                    qos = requestedQos.GetInt32();
+                topic = topicElement.GetString() ?? "";
+                payload = payloadElement.GetString() ?? "";
+                return true;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        int separator = argument.IndexOf('\n');
+        if (separator < 1) return false;
+        topic = argument.Substring(0, separator);
+        payload = argument.Substring(separator + 1);
+        return true;
     }
 
     private async Task ProcessPublishQueueAsync(CancellationToken token)
@@ -207,10 +257,19 @@ public sealed class MqttDiagnosticModule : INonSharedRegionModule
                     var message = new MqttApplicationMessageBuilder()
                         .WithTopic(request.Topic)
                         .WithPayload(request.Payload)
-                        .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
-                        .WithRetainFlag(false)
+                        .WithQualityOfServiceLevel(request.Qos == 1
+                            ? MqttQualityOfServiceLevel.AtLeastOnce
+                            : MqttQualityOfServiceLevel.AtMostOnce)
+                        .WithRetainFlag(request.Retain)
                         .Build();
-                    await _client.PublishAsync(message, token);
+                    var result = await _client.PublishAsync(message, token);
+                    if (!result.IsSuccess)
+                    {
+                        Log.Warn("[OpenSimMQTT] Broker rejected script publish: " + result.ReasonCode);
+                        Reply(request.ScriptId, 71003, "Publish failed", request.RequestId);
+                        continue;
+                    }
+                    // QoS 0 has no broker acknowledgement; QoS 1 completes after PUBACK.
                     Reply(request.ScriptId, 71002, "OpenSimMQTT:published", request.RequestId);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
